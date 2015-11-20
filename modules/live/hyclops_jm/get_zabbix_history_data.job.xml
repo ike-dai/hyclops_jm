@@ -1,0 +1,131 @@
+<job title="Get Zabbix item history job (javascript(Nashorn))" order="yes">
+<params>
+  <param name="url" value="http://localhost/zabbix/api_jsonrpc.php" />
+  <param name="username" value="Admin" />
+  <param name="password" value="zabbix" />
+  <param name="itemid" value="please input itemid" />
+  <param name="limit" value="1" />
+</params>
+<script language="javax.script:javascript">
+<![CDATA[
+var url;
+var username;
+var password;
+var auth_token;
+var itemid;
+var limit;
+
+function spooler_init() {
+    var params = getParameter();
+    if (params != null) {
+        url = params.value("url");
+        username = params.value("username");
+        password = params.value("password");
+        itemid = params.value("itemid");
+    }
+    return true;
+}
+
+
+function spooler_open() {
+    var auth_json = getAuth(url, username, password);
+    auth_token = auth_json.result;
+    return true;
+}
+
+function spooler_process() {
+    var history_json = getHistory(url, username, password, auth_token, itemid, 3, 1);
+    spooler_task.order().params().set_var ("history_data_" + itemid, history_json.result[0].value);
+    return (spooler_task.order() != null);
+}
+
+
+function getAuth(url, username, password){
+    var params = {"user":username, "password":password};
+    return callZabbixApi(url, null, params, 'user.login');
+}
+
+function getHistory(url, username, password, auth_token, itemid, type, limit){
+    var params = {"output":"extend","history":type, "itemids":itemid,"sortfield":"clock","sortorder":"DESC","limit":limit};
+    return callZabbixApi(url, auth_token, params, 'history.get');
+}
+
+function callZabbixApi(url, auth_token, params, method) {
+    var authRequest = new Object();
+    authRequest.params = params;
+    authRequest.auth = auth_token;
+    authRequest.jsonrpc = '2.0';
+    authRequest.id = 0;
+    authRequest.method = method;
+    var authJsonRequest = JSON.stringify(authRequest);
+    var authResult = new Object();
+    var result = httpPost(url, authJsonRequest, "application/json-rpc");
+    return result.data;
+}
+
+
+
+//============
+
+function httpGet(theUrl){
+    var con = new java.net.URL(theUrl).openConnection();
+    con.requestMethod = "GET";
+
+    return asResponse(con);
+}
+
+function httpPost(theUrl, data, contentType){
+    contentType = contentType || "application/json";
+    var con = new java.net.URL(theUrl).openConnection();
+
+    con.requestMethod = "POST";
+    con.setRequestProperty("Content-Type", contentType);
+
+    // Send post request
+    con.doOutput=true;
+    write(con.outputStream, data);
+
+    return asResponse(con);
+}
+
+function asResponse(con){
+    var d = read(con.inputStream);
+
+    return {data : JSON.parse(d), statusCode : con.responseCode};
+}
+
+function write(outputStream, data){
+    var wr = new java.io.DataOutputStream(outputStream);
+    wr.writeBytes(data);
+    wr.flush();
+    wr.close();
+}
+
+function read(inputStream){
+    var inReader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream));
+    var inputLine;
+    var response = new java.lang.StringBuffer();
+
+    while ((inputLine = inReader.readLine()) != null) {
+           response.append(inputLine);
+    }
+    inReader.close();
+    return response.toString();
+}
+
+function getParameter () {
+    var params = spooler.create_variable_set();
+    var taskParams = spooler_task.params();
+    if (taskParams != null) {
+        params.merge(taskParams);
+    }
+    var order = spooler_task.order();
+    if (order != null) { // to avoid TypeError: "order has no properties in line 31, column 1,"
+        params.merge(order.params());
+    }
+    return params;
+}
+]]>
+</script>
+<run_time/>
+</job>
